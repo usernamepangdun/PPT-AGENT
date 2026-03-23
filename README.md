@@ -268,12 +268,3 @@ playwright>=1.40.0
 ## License
 
 ---
-
-## 备注
-
-如果你准备把项目开源到 GitHub，建议：
-
-- 不要提交 `.env`
-- 保留 `.env.example`
-- 不要提交 `output/` 生成结果
-- 可在后续补充 `.gitignore`
