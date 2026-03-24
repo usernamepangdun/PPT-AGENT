@@ -138,7 +138,10 @@ python check_api.py --mode responses
 ```bash
 python main.py -t "主题"
 ```
-
+或
+```bash
+python main.py
+```
 示例：
 
 ```bash
@@ -161,10 +164,19 @@ output/红茶与绿茶的区别/
 
 适合：更稳定的页面排版，减少文字溢出。
 
+HTML pipeline 当前内置了页面自检兜底：
+- 生成后会用 Playwright 检查真实 DOM 布局
+- 轻微超限时会自动应用紧凑模式（compact mode）
+- 对“总结页 + 多模块 + footer”这类高风险布局，会自动触发 `summary-safe mode`
+- 修正后的安全样式会回写到生成的 `.html` 文件中，便于直接检查最终版本
+
 ```bash
 python -m html_pipeline.main -t "主题"
 ```
-
+或
+```bash
+python -m html_pipeline.main
+```
 示例：
 
 ```bash
@@ -233,6 +245,7 @@ DEFAULT_AUDIENCE=销售团队
 ### HTML pipeline
 - 最终导出的 PPT 页面本质是截图图片，不是原生可编辑形状
 - 但排版稳定性更好，当前更推荐使用
+- 已内置布局检测、compact mode 与 `summary-safe mode`，用于缓解高密度页面的重叠和超高问题
 
 ---
 
