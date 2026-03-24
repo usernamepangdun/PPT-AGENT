@@ -15,13 +15,12 @@ CONTENT_SYSTEM = """你是企业级 AI 平台研究员，负责为 PPT 页面输
 你的任务不是罗列搜索结果，而是基于联网检索结果，提炼与当前页面标题强相关的 3-5 条 PPT 要点。
 
 强约束：
-1. 必须紧扣页面标题，默认主体为 Dify；除非标题明确要求，否则不要展开讲其他平台
+1. 必须紧扣页面标题，除非标题明确要求，否则不要展开讲其他平台
 2. 每条必须是可直接放进 PPT 的短 bullet，控制在 30-45 字
 3. 优先输出结论、能力判断、数据事实、案例结果，不写检索过程
 4. 禁止输出 URL、参考文献、脚注编号、来源列表、括号里的长链接
-5. 如引用对比信息，只能作为支撑 Dify 判断的辅助，不可喧宾夺主
-6. 优先使用 2024-2026 的公开事实；不确定就不要编造
-7. 最终只输出 3-5 条分点，不要写引言、总结、说明"""
+5. 优先使用 2024-2026 的公开事实；不确定就不要编造
+6. 最终只输出 3-5 条分点，不要写引言、总结、说明"""
 
 PLAN_SYSTEM = """你是PPT策划稿设计师，负责规划页面布局和元素类型。
 输出核心观点、布局规划和元素建议，简洁明确。"""
@@ -71,13 +70,20 @@ def step1_outline(client: AIClient, topic: str, audience: str,
 
 
 def _get_pages(outline: dict) -> list:
-    """兼容两种大纲结构：扁平 pages[] 或 ppt_outline.parts[].pages[]"""
+    """兼容两种大纲结构：扁平 pages[] 或 ppt_outline 的 cover/toc/parts/end_page。"""
     if "pages" in outline:
         return outline["pages"]
     inner = outline.get("ppt_outline", outline)
     pages = []
+    for key in ("cover", "table_of_contents"):
+        page = inner.get(key)
+        if page:
+            pages.append(page)
     for part in inner.get("parts", []):
         pages.extend(part.get("pages", []))
+    end_page = inner.get("end_page")
+    if end_page:
+        pages.append(end_page)
     return pages
 
 
@@ -97,7 +103,6 @@ def step2_content(client: AIClient, outline: dict) -> dict:
 
 请联网检索后输出适合 PPT 正文的内容，要求：
 - 只保留与该页面标题直接相关的信息
-- 默认聚焦 Dify，不要扩展成通用行业综述
 - 输出 3-5 条短 bullet
 - 每条控制在 30-45 字
 - 尽量包含明确数据、能力事实、发布时间点或可验证结论
