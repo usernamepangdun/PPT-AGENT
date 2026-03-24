@@ -26,11 +26,17 @@ def main():
         help="AI 接口",
     )
     parser.add_argument("--research", "-r", default="", help="补充调研信息")
+    parser.add_argument(
+        "--polish",
+        action="store_true",
+        help="启用逐页精修模式，仅对有问题页面做额外修复",
+    )
     args = parser.parse_args()
 
     topic = args.topic or os.getenv("DEFAULT_TOPIC")
     audience = args.audience or os.getenv("DEFAULT_AUDIENCE", "通用受众")
     pages = args.pages or os.getenv("DEFAULT_PAGES", "12-15页")
+    polish = args.polish or os.getenv("HTML_POLISH_MODE", "false").lower() in {"1", "true", "yes", "on"}
 
     if not topic:
         print("[错误] 未提供 PPT 主题。请通过 --topic 传入或在 .env 中设置 DEFAULT_TOPIC。",
@@ -42,6 +48,7 @@ def main():
     print(f"页数：{pages}")
     print(f"模型：{os.getenv('OPENAI_MODEL', 'gpt-4o')}")
     print(f"模式：HTML")
+    print(f"精修：{'开启' if polish else '关闭'}")
     print("-" * 40)
 
     try:
@@ -51,6 +58,7 @@ def main():
             page_req=pages,
             provider=args.provider,
             research=args.research,
+            polish=polish,
         )
         print(f"\n喵~任务完成，HTML 文件已保存至：{out}/html/")
     except Exception as e:

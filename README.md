@@ -77,6 +77,7 @@ DEFAULT_PROVIDER=openai
 DEFAULT_TOPIC=红茶与绿茶的区别
 DEFAULT_AUDIENCE=销售团队
 DEFAULT_PAGES=3-5页
+HTML_POLISH_MODE=false
 OUTPUT_DIR=./output
 ```
 
@@ -89,22 +90,20 @@ medium
 high
 ```
 
-### `DEFAULT_TOPIC` 用法
-
-如果你在 `.env` 中配置了：
+### `HTML_POLISH_MODE` 用法
 
 ```env
-DEFAULT_TOPIC=红茶与绿茶的区别
+HTML_POLISH_MODE=false
 ```
 
-那么运行时可以不传 `-t`：
+- `false`：默认模式，只做自动布局检测与基础兜底
+- `true`：开启逐页精修模式，只对有问题页面追加一轮局部修复
+
+命令行也可以临时开启：
 
 ```bash
-python main.py
-python -m html_pipeline.main
+python -m html_pipeline.main --polish
 ```
-
-命令行如果显式传了 `-t`，会优先使用命令行主题。
 
 ---
 
@@ -168,6 +167,8 @@ HTML pipeline 当前内置了页面自检兜底：
 - 生成后会用 Playwright 检查真实 DOM 布局
 - 轻微超限时会自动应用紧凑模式（compact mode）
 - 对“总结页 + 多模块 + footer”这类高风险布局，会自动触发 `summary-safe mode`
+- 对发展脉络/阶段演进页，会自动触发 `timeline-safe mode`
+- 对高密度信息卡页面，会自动触发 `dense-card-safe mode`
 - 修正后的安全样式会回写到生成的 `.html` 文件中，便于直接检查最终版本
 
 ```bash
@@ -205,6 +206,7 @@ SVG 和 HTML 两条命令都支持：
 --pages / -p       页数要求
 --provider / -m    openai / claude / domestic
 --research / -r    补充调研信息
+--polish           启用逐页精修模式（HTML）
 ```
 
 示例：
@@ -245,7 +247,8 @@ DEFAULT_AUDIENCE=销售团队
 ### HTML pipeline
 - 最终导出的 PPT 页面本质是截图图片，不是原生可编辑形状
 - 但排版稳定性更好，当前更推荐使用
-- 已内置布局检测、compact mode 与 `summary-safe mode`，用于缓解高密度页面的重叠和超高问题
+- 已内置布局检测、compact mode、`summary-safe mode`、`timeline-safe mode` 与 `dense-card-safe mode`
+- 如需更激进的逐页修复，可通过 `--polish` 或 `.env` 中的 `HTML_POLISH_MODE=true` 开启精修模式
 
 ---
 

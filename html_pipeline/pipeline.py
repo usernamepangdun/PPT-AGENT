@@ -173,9 +173,48 @@ def step4_html(client: AIClient, title: str, material: str,
     return extract_html(raw)
 
 
+def _validate_and_optionally_regenerate(client: AIClient, html_path: Path,
+                                        title: str, material: str, plan: str,
+                                        audience: str, page_role: str,
+                                        polish: bool) -> dict:
+    from html_pipeline.html_builder import render_html_with_validation
+
+    _, report = render_html_with_validation(html_path)
+    if report["compact_applied"]:
+        print(f"    [检查] {html_path.name} 轻微超限，截图前可通过紧凑模式修正")
+
+    attempts = 2 if polish else 1
+    for attempt in range(attempts):
+        if report["status"] != "regenerate":
+            break
+        issue_lines = report["final_issues"] or report["initial_issues"]
+        issue_text = "\n".join(f"- {line}" for line in issue_lines[:8])
+        if attempt == 0:
+            print(f"    [检查] {html_path.name} 存在结构性布局问题，执行一次重生成...")
+        else:
+            print(f"    [精修] {html_path.name} 仍有问题，执行逐页精修重生成...")
+        html = step4_html(client, title, material, plan, audience, page_role, layout_feedback=issue_text)
+        html_path.write_text(html, encoding="utf-8")
+        _, report = render_html_with_validation(html_path)
+        if report.get("timeline_safe_applied"):
+            print(f"    [检查] {html_path.name} 已应用 timeline-safe mode")
+        if report.get("dense_card_safe_applied"):
+            print(f"    [检查] {html_path.name} 已应用 dense-card-safe mode")
+        if report.get("summary_safe_applied"):
+            print(f"    [检查] {html_path.name} 已应用 summary-safe mode")
+        if report["compact_applied"]:
+            print(f"    [检查] {html_path.name} 重生成后仍需紧凑模式辅助")
+
+    if report["final_issues"]:
+        print(f"    [检查] {html_path.name} 仍有 {len(report['final_issues'])} 个问题，使用当前最优版本继续")
+    else:
+        print(f"    [检查] {html_path.name} 通过布局检查")
+    return report
+
+
 def run_pipeline(topic: str, audience: str = "通用受众",
                  page_req: str = "12-15页", provider: str | None = None,
-                 research: str = "") -> Path:
+                 research: str = "", polish: bool = False) -> Path:
     """运行 HTML 版本的 PPT 生成 pipeline。"""
     client = AIClient(provider)
     out = Path(OUTPUT_DIR) / topic.replace(" ", "_")
@@ -196,7 +235,6 @@ def run_pipeline(topic: str, audience: str = "通用受众",
     html_dir.mkdir(exist_ok=True)
     for old_html in html_dir.glob("*.html"):
         old_html.unlink()
-    from html_pipeline.html_builder import render_html_with_validation
     all_pages = _get_pages(outline)
     total_pages = len(all_pages)
     idx = 1
@@ -209,25 +247,9 @@ def run_pipeline(topic: str, audience: str = "通用受众",
 
         html = step4_html(client, title, material, plan, audience, page_role)
         html_path.write_text(html, encoding="utf-8")
-
-        _, report = render_html_with_validation(html_path)
-        if report["compact_applied"]:
-            print(f"    [检查] {html_path.name} 轻微超限，截图前可通过紧凑模式修正")
-
-        if report["status"] == "regenerate":
-            issue_lines = report["final_issues"] or report["initial_issues"]
-            issue_text = "\n".join(f"- {line}" for line in issue_lines[:8])
-            print(f"    [检查] {html_path.name} 存在结构性布局问题，执行一次重生成...")
-            html = step4_html(client, title, material, plan, audience, page_role, layout_feedback=issue_text)
-            html_path.write_text(html, encoding="utf-8")
-            _, report = render_html_with_validation(html_path)
-            if report["compact_applied"]:
-                print(f"    [检查] {html_path.name} 重生成后仍需紧凑模式辅助")
-            if report["final_issues"]:
-                print(f"    [检查] {html_path.name} 重生成后仍有 {len(report['final_issues'])} 个问题，使用当前最优版本继续")
-            else:
-                print(f"    [检查] {html_path.name} 重生成后通过布局检查")
-
+        _validate_and_optionally_regenerate(
+            client, html_path, title, material, plan, audience, page_role, polish
+        )
         idx += 1
 
     print("[4/4] 合成 PPT...")
