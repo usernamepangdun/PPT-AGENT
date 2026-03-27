@@ -31,6 +31,12 @@ def main():
         action="store_true",
         help="启用逐页精修模式，仅对有问题页面做额外修复",
     )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="短链路验证时仅生成前 N 页（包含封面/目录/结尾在内的实际页面）",
+    )
     args = parser.parse_args()
 
     topic = args.topic or os.getenv("DEFAULT_TOPIC")
@@ -49,6 +55,8 @@ def main():
     print(f"模型：{os.getenv('OPENAI_MODEL', 'gpt-4o')}")
     print(f"模式：HTML")
     print(f"精修：{'开启' if polish else '关闭'}")
+    if args.max_pages:
+        print(f"短链路页数：前 {args.max_pages} 页")
     print("-" * 40)
 
     try:
@@ -59,6 +67,7 @@ def main():
             provider=args.provider,
             research=args.research,
             polish=polish,
+            max_pages=args.max_pages,
         )
         print(f"\n喵~任务完成，HTML 文件已保存至：{out}/html/")
     except Exception as e:

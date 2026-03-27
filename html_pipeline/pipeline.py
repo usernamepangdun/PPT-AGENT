@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ai_client import AIClient
-from config import OUTPUT_DIR
+from config import OUTPUT_DIR, REVIEW_ENABLED, REVIEW_PROVIDER, REVIEW_MODEL, REVIEW_REASONING_EFFORT
 from pipeline import (
     step1_outline, step2_content, step3_plan,
     _get_pages, _get_title,
@@ -15,6 +15,27 @@ from pipeline import (
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent
 HTML_PROMPT_FILE = PROMPTS_DIR / "html-ppt优化提示词.md"
+
+REVIEW_SYSTEM = """你是独立的 PPT 页面审查员，只负责审查，不负责美化表演。
+
+审查目标：基于页面截图判断该页是否适合作为最终 PPT 页面导出。
+
+审查原则：
+1. 优先判断信息密度、视觉层级、重点突出、模块数量、页脚干扰、节奏感
+2. 不要重复技术校验已能发现的纯 DOM 错误；重点补充“视觉上是否拥挤、是否难读、是否重点不清”
+3. 如果页面可接受，输出 PASS
+4. 如果页面不可接受，输出 REVISE，并给出最多 4 条保守、可执行的修改建议
+5. 建议必须偏收缩：删模块、减节点、减指标、减场景、减说明，避免要求加入新复杂结构
+
+输出格式必须严格如下：
+RESULT: PASS 或 RESULT: REVISE
+REASONS:
+- ...
+- ...
+SUGGESTIONS:
+- ...
+- ..."""
+
 
 HTML_SYSTEM = """你是顶级 PPT 视觉设计师，负责将结构化素材转化为单页 HTML 演示文稿页面。
 
@@ -80,18 +101,32 @@ def extract_html(text: str) -> str:
     return text
 
 
+def _generate_with_retry(label: str, func, attempts: int = 5):
+    last_exc = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return func()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < attempts:
+                print(f"    [重试] {label} 第 {attempt} 次失败，准备重试：{exc}")
+            else:
+                raise
+    raise last_exc
+
+
 def _infer_page_role(index: int, total_pages: int, title: str, plan: str, material: str) -> str:
     text = f"{title}\n{plan}\n{material}".lower()
-    if any(keyword in text for keyword in ["脉络", "发展史", "演变", "阶段", "timeline", "历史"]):
-        return "timeline"
     if index == 1 or any(keyword in text for keyword in ["封面", "cover"]):
         return "cover"
     if index == total_pages or any(keyword in text for keyword in ["总结", "结论", "展望", "thanks", "thank", "ending"]):
         return "ending"
     if any(keyword in text for keyword in ["目录", "agenda", "toc"]):
         return "toc"
-    if any(keyword in text for keyword in ["总结", "结论", "判断", "建议", "表达", "路线", "路径"]):
+    if any(keyword in text for keyword in ["总结", "结论", "判断", "建议", "表达", "路线", "路径", "销售", "应用", "价值", "话术"]):
         return "summary"
+    if any(keyword in text for keyword in ["脉络", "发展史", "演变", "阶段", "timeline"]):
+        return "timeline"
     return "content"
 
 
@@ -118,8 +153,42 @@ def _build_role_guidance(page_role: str) -> str:
         return common + """- 当前页是结尾页：强调收束感，不要铺满信息
 - 优先单结论或双区块结构，避免复杂卡片矩阵
 - footer 只做轻量收尾，不要厚重"""
-    return common + """- 当前页是内容页：根据内容密度决定 2 栏还是 3 栏
-- 当存在步骤、日期、指标、总结同时出现时，优先降为 2 栏，避免 footer 被挤压"""
+    return common + """- 当前页是内容页：默认使用 2 个主区域 + 1 个 footer 的稳态结构，不要堆拥挤三栏
+- 主内容区最多保留 1 个主模块 + 1 个辅助模块；如果同时出现时间线、步骤、指标、场景、总结等混合结构，必须删减到只保留其中 1 类辅助信息
+- 优先使用“左主右辅”或“上主下辅”结构，避免 footer 被挤压"""
+
+
+def _build_content_budget(page_role: str) -> str:
+    if page_role == "cover":
+        return """- 最多 1 个主标题 + 1 行副标题 + 1 个辅助信息块
+- 不要生成多张并列内容卡
+- 装饰信息宁少勿多，优先保留单焦点"""
+    if page_role == "toc":
+        return """- 最多 2 个主区域：左侧观点卡 + 右侧流程/目录卡
+- 右侧最多 3 个步骤卡；每卡最多 1 个标题 + 1 句说明 + 3 个标签
+- 左侧最多 1 个高亮结论块 + 1 段说明 + 3 个标签
+- 如果仍显空，只允许补 2-3 个短说明块，不要补大型数据卡"""
+    if page_role == "summary":
+        return """- 总结页最多 2 列
+- 左区最多 2 个主卡；右区最多 3 个步骤卡
+- 每张卡最多 2 个 bullet 或 1 段说明 + 3 个标签
+- footer 总结区最多 1 句主结论 + 2 个短 action 标签"""
+    if page_role == "timeline":
+        return """- 时间线最多 4 个节点
+- 每节点只保留：阶段名 + 时间 + 1 句说明 + 最多 2 个短标签
+- 右侧辅助区最多 2 张卡，且总共最多 2 个大数字/指标
+- footer 最多 1 句总结，不要再叠加第二条长说明"""
+    if page_role == "ending":
+        return """- 结尾页最多 2 个主区块 + 1 个 footer
+- 右侧判断/结论区最多 3 个步骤卡，每步 1 个标题 + 1 句说明 + 1 个短注释
+- 底部结果区最多 2 个结果卡
+- footer 最多 1 句结论 + 2 个短标签
+- 长说明卡必须改成“1 句主结论 + 2 条短支撑”，不要写整段长文"""
+    return """- 普通内容页最多 2 个主区域 + 1 个 footer，不要生成 3 个以上并列主卡
+- 主卡只保留 1 个核心观点；辅助区最多保留 1 类辅助信息（步骤 / 指标 / 场景 / 时间线 四选一）
+- 若使用时间线，节点最多 4 个；若使用步骤，步骤最多 3 个；若使用指标，指标块最多 2 个；若使用场景，场景项最多 3 个
+- 长说明卡最多 36 个中文字符，超过时必须拆成 1 句主结论 + 2 条短 bullet
+- footer 最多 1 句结论 + 2-3 个短标签；一旦主内容区已较满，优先删辅助模块，不要加厚 footer"""
 
 
 def step4_html(client: AIClient, title: str, material: str,
@@ -127,6 +196,7 @@ def step4_html(client: AIClient, title: str, material: str,
                layout_feedback: str = "") -> str:
     """生成单页 HTML 演示文稿。"""
     role_guidance = _build_role_guidance(page_role)
+    content_budget = _build_content_budget(page_role)
     feedback_block = ""
     if layout_feedback:
         feedback_block = f"""
@@ -137,18 +207,24 @@ def step4_html(client: AIClient, title: str, material: str,
 请严格修正以上问题，并使用更保守的结构：
 - 优先减少模块数量，而不是只缩小字号
 - 优先把 3 栏降为 2 栏或“上主下辅”结构
+- 普通内容页最多保留 1 个主模块 + 1 个辅助模块；若同时出现时间线、步骤、指标、场景、总结等混合结构，必须删掉至少 1 类辅助模块
 - 如果是时间线/发展脉络页，优先减少节点数量到 4 个以内，并压缩右侧辅助区
 - 保持主题和视觉风格不变，但必须先保证框架稳定、footer 安全、主内容区不重叠"""
 
+    plan_summary = plan[:1200]
+    material_summary = material[:1200]
     user = f"""请将以下内容转化为单页 HTML 演示文稿页面：
 页面标题：{title}
-核心素材：{material}
-布局规划：{plan}
+核心素材：{material_summary}
+布局规划：{plan_summary}
 目标受众：{audience}
 页面角色：{page_role}
 
 页面角色与结构指导：
-{role_guidance}{feedback_block}
+{role_guidance}
+
+页面内容预算（必须严格遵守）：
+{content_budget}{feedback_block}
 
 生成约束：
 - 页面固定 1280×720px，html 和 body 设置 width:1280px; height:720px; overflow:hidden; margin:0;
@@ -169,8 +245,154 @@ def step4_html(client: AIClient, title: str, material: str,
 - 标签/胶囊控制在 4-8 个中文字符
 - 直接输出完整 HTML 代码"""
 
-    raw = client.chat(HTML_SYSTEM, user, temperature=0.4)
+    raw = _generate_with_retry(
+        f"HTML生成《{title}》",
+        lambda: client.chat(HTML_SYSTEM, user, temperature=0.4),
+    )
     return extract_html(raw)
+
+
+def _parse_review_result(text: str) -> dict:
+    result = "PASS"
+    reasons = []
+    suggestions = []
+    section = "reasons"
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        upper = line.upper()
+        if upper.startswith("RESULT:"):
+            result = upper.split(":", 1)[1].strip() or "PASS"
+            continue
+        if upper.startswith("REASONS:"):
+            section = "reasons"
+            continue
+        if upper.startswith("SUGGESTIONS:"):
+            section = "suggestions"
+            continue
+        if line.startswith("- "):
+            if section == "suggestions":
+                suggestions.append(line[2:].strip())
+            else:
+                reasons.append(line[2:].strip())
+    normalized = "REVISE" if "REVISE" in result else "PASS"
+    return {
+        "result": normalized,
+        "reasons": [item for item in reasons if item],
+        "suggestions": [item for item in suggestions if item],
+        "raw": text.strip(),
+    }
+
+
+def _write_review_artifact(review_dir: Path, page_index: int, html_name: str, review: dict) -> Path:
+    review_path = review_dir / f"review-{page_index:02d}.md"
+    lines = [
+        f"# {html_name}",
+        "",
+        f"RESULT: {review['result']}",
+        "",
+        f"REVIEW_ROUNDS: {review.get('review_rounds', 1)}",
+        "",
+        "## Reasons",
+    ]
+    if review["reasons"]:
+        lines.extend([f"- {item}" for item in review["reasons"]])
+    else:
+        lines.append("- 无")
+    lines.extend(["", "## Suggestions"])
+    if review["suggestions"]:
+        lines.extend([f"- {item}" for item in review["suggestions"]])
+    else:
+        lines.append("- 无")
+    lines.extend(["", "## Raw", "", review["raw"] or "(empty)"])
+    review_path.write_text("\n".join(lines), encoding="utf-8")
+    return review_path
+
+
+def _review_and_optionally_fix(generator_client: AIClient, review_client: AIClient | None, html_path: Path, page_index: int,
+                              title: str, material: str, plan: str, audience: str,
+                              page_role: str, validation_report: dict) -> dict:
+    review_result = {
+        "result": "SKIPPED",
+        "reasons": [],
+        "suggestions": [],
+        "raw": "review disabled",
+        "review_path": None,
+        "review_rounds": 0,
+    }
+    if not review_client:
+        return review_result
+
+    review_dir = html_path.parent.parent / "reviews"
+    review_dir.mkdir(exist_ok=True)
+    screenshot_path = review_dir / f"slide-{page_index:02d}.png"
+
+    from html_pipeline.html_builder import render_html_screenshot, render_html_with_validation
+
+    screenshot_path.write_bytes(render_html_screenshot(html_path))
+    current_report = validation_report
+    current_review = None
+
+    for attempt in range(2):
+        issue_lines = current_report.get("final_issues") or current_report.get("initial_issues") or []
+        issue_text = "\n".join(f"- {line}" for line in issue_lines[:6]) or "- 无明显技术布局问题"
+        review_prompt = f"""请审查这页 PPT 截图是否适合作为最终导出页面。
+页面标题：{title}
+页面角色：{page_role}
+目标受众：{audience}
+策划摘要：{plan[:500]}
+素材摘要：{material[:500]}
+技术校验摘要：
+{issue_text}
+
+请重点判断：
+- 信息是否过满
+- 模块是否过多
+- 视觉重点是否清楚
+- 页脚是否喧宾夺主
+- 是否需要删减节点/指标/场景/说明文字
+"""
+        current_review = _parse_review_result(
+            review_client.review_image(
+                REVIEW_SYSTEM,
+                review_prompt,
+                screenshot_path,
+                reasoning_effort=REVIEW_REASONING_EFFORT,
+            )
+        )
+        current_review["review_rounds"] = attempt + 1
+
+        if current_review["result"] != "REVISE" or not current_review["suggestions"]:
+            break
+
+        review_feedback = "\n".join(f"- {item}" for item in current_review["suggestions"][:4])
+        last_regen_exc = None
+        regen_succeeded = False
+        for _ in range(2):
+            try:
+                html = step4_html(generator_client, title, material, plan, audience, page_role, layout_feedback=review_feedback)
+                html_path.write_text(html, encoding="utf-8")
+                _, current_report = render_html_with_validation(html_path)
+                screenshot_path.write_bytes(render_html_screenshot(html_path))
+                regen_succeeded = True
+                break
+            except Exception as exc:
+                last_regen_exc = exc
+        if not regen_succeeded:
+            raise last_regen_exc
+
+        if current_report.get("status") == "pass":
+            current_review["result"] = "PASS"
+            current_review["reasons"] = ["根据审查建议重生成后，页面已通过技术校验。"]
+            current_review["suggestions"] = ["无需继续修改"]
+            current_review["raw"] = "RESULT: PASS\nREASONS:\n- 根据审查建议重生成后，页面已通过技术校验。\nSUGGESTIONS:\n- 无需继续修改"
+            break
+
+    review_result.update(current_review or {})
+    review_path = _write_review_artifact(review_dir, page_index, html_path.name, review_result)
+    review_result["review_path"] = str(review_path)
+    review_result["post_fix_validation_status"] = current_report.get("status")
+    review_result["post_fix_final_issues"] = len(current_report.get("final_issues") or [])
+    return review_result
 
 
 def _validate_and_optionally_regenerate(client: AIClient, html_path: Path,
@@ -214,11 +436,18 @@ def _validate_and_optionally_regenerate(client: AIClient, html_path: Path,
 
 def run_pipeline(topic: str, audience: str = "通用受众",
                  page_req: str = "12-15页", provider: str | None = None,
-                 research: str = "", polish: bool = False) -> Path:
+                 research: str = "", polish: bool = False,
+                 max_pages: int | None = None) -> Path:
     """运行 HTML 版本的 PPT 生成 pipeline。"""
     client = AIClient(provider)
+    review_client = None
+    if REVIEW_ENABLED:
+        review_client = AIClient(REVIEW_PROVIDER)
+        if REVIEW_MODEL:
+            review_client.model = REVIEW_MODEL
     out = Path(OUTPUT_DIR) / topic.replace(" ", "_")
     out.mkdir(parents=True, exist_ok=True)
+    slide_status = {}
 
     print("[1/4] 生成大纲...")
     outline = step1_outline(client, topic, audience, page_req, research)
@@ -233,9 +462,16 @@ def run_pipeline(topic: str, audience: str = "通用受众",
     print("[3/4] 生成策划稿 + HTML...")
     html_dir = out / "html"
     html_dir.mkdir(exist_ok=True)
+    review_dir = out / "reviews"
+    review_dir.mkdir(exist_ok=True)
     for old_html in html_dir.glob("*.html"):
         old_html.unlink()
+    for old_review in review_dir.glob("*"):
+        if old_review.is_file():
+            old_review.unlink()
     all_pages = _get_pages(outline)
+    if max_pages and max_pages > 0:
+        all_pages = all_pages[:max_pages]
     total_pages = len(all_pages)
     idx = 1
     for page in all_pages:
@@ -247,9 +483,27 @@ def run_pipeline(topic: str, audience: str = "通用受众",
 
         html = step4_html(client, title, material, plan, audience, page_role)
         html_path.write_text(html, encoding="utf-8")
-        _validate_and_optionally_regenerate(
+        validation_report = _validate_and_optionally_regenerate(
             client, html_path, title, material, plan, audience, page_role, polish
         )
+        review_result = _review_and_optionally_fix(
+            client, review_client, html_path, idx, title, material, plan, audience, page_role, validation_report
+        )
+        final_validation_status = review_result.get("post_fix_validation_status", validation_report.get("status"))
+        final_issues_count = review_result.get("post_fix_final_issues", len(validation_report.get("final_issues") or []))
+        export_ready = final_validation_status == "pass" and review_result.get("result") != "REVISE"
+        slide_status[f"{idx:02d}"] = {
+            "title": title,
+            "page_role": page_role,
+            "validation_status": final_validation_status,
+            "final_issues_count": final_issues_count,
+            "review_status": review_result.get("result"),
+            "review_rounds": review_result.get("review_rounds", 0),
+            "review_path": review_result.get("review_path"),
+            "export_ready": export_ready,
+        }
+        from html_pipeline.html_builder import write_slide_status
+        write_slide_status(out, slide_status)
         idx += 1
 
     print("[4/4] 合成 PPT...")

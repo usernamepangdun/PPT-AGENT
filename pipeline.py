@@ -91,6 +91,17 @@ def _get_title(page: dict) -> str:
     return page.get("title") or page.get("page_title", f"第{page.get('page','')}页")
 
 
+def _fallback_page_content(title: str, hint: str) -> str:
+    base_points = [
+        f"- 围绕“{title}”先给出最核心定义，再说明它为什么重要。",
+        f"- 结合页面主题，提炼 2-3 个最直接的判断或事实，不展开冗长背景。",
+        f"- 如果涉及时间、用途、差异或价值，只保留最关键的一层信息。",
+    ]
+    if hint:
+        base_points.append(f"- 参考要点：{hint[:60]}{'…' if len(hint) > 60 else ''}")
+    return "\n".join(base_points[:4])
+
+
 def step2_content(client: AIClient, outline: dict) -> dict:
     pages = _get_pages(outline)
     contents = {}
@@ -111,15 +122,32 @@ def step2_content(client: AIClient, outline: dict) -> dict:
 - 如果检索结果不足，就输出更稳妥的能力结论，不要硬编
 
 直接输出分点列表。"""
-        if client.provider == "openai":
-            tools = [{"type": "web_search", "search_context_size": "high"}]
-            contents[title] = client.responses(
-                CONTENT_SYSTEM,
-                user,
-                tools=tools,
-            )
-        else:
-            contents[title] = client.chat(CONTENT_SYSTEM, user, temperature=0.5)
+        try:
+            if client.provider == "openai":
+                tools = [{"type": "web_search", "search_context_size": "high"}]
+                contents[title] = client.responses(
+                    CONTENT_SYSTEM,
+                    user,
+                    reasoning_effort="low",
+                    tools=tools,
+                )
+            else:
+                contents[title] = client.chat(CONTENT_SYSTEM, user, temperature=0.5)
+        except Exception as exc:
+            print(f"    [降级] 页面《{title}》联网扩写失败，改用保守内容生成：{exc}")
+            fallback_user = f"""页面标题：{title}
+页面参考要点：{hint or '无'}
+
+请不要联网，直接基于标题与参考要点，输出适合 PPT 的 2-3 条保守短 bullet。
+要求：
+- 不要编造具体年份、数据、机构
+- 优先输出定义、用途、判断逻辑、常见差异
+- 每条控制在 22-35 字
+- 只输出分点列表"""
+            try:
+                contents[title] = client.chat(CONTENT_SYSTEM, fallback_user, temperature=0.3)
+            except Exception:
+                contents[title] = _fallback_page_content(title, hint)
     return contents
 
 

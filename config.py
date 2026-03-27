@@ -3,6 +3,9 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+# 默认使用的 provider
+DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", "openai")
+
 # 支持的 AI Provider 配置
 PROVIDERS = {
     "openai": {
@@ -23,8 +26,10 @@ PROVIDERS = {
     },
 }
 
-# 默认使用的 provider
-DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", "openai")
+REVIEW_PROVIDER = os.getenv("REVIEW_PROVIDER", DEFAULT_PROVIDER)
+REVIEW_MODEL = os.getenv("REVIEW_MODEL", "")
+REVIEW_REASONING_EFFORT = os.getenv("REVIEW_REASONING_EFFORT", "low")
+REVIEW_ENABLED = os.getenv("HTML_AI_REVIEW_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
 
 # 输出目录
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "./output")

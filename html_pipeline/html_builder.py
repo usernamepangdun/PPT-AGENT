@@ -1,5 +1,6 @@
 from pathlib import Path
 import io
+import json
 import re
 from pptx import Presentation
 from pptx.util import Inches
@@ -114,6 +115,206 @@ COMPACT_STYLE = """
 .icon {
   transform: scale(0.92);
   transform-origin: center;
+}
+"""
+
+
+TOC_SAFE_STYLE = """
+.slide {
+  gap: 14px !important;
+}
+.left-card {
+  justify-content: flex-start !important;
+  gap: 16px !important;
+}
+.flow-card {
+  gap: 12px !important;
+}
+.steps {
+  flex: 1 !important;
+  gap: 12px !important;
+}
+.flow-fill {
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 12px !important;
+  margin-top: 2px !important;
+}
+.fill-card {
+  border-radius: 12px !important;
+  padding: 12px 12px 10px !important;
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid rgba(122, 137, 165, 0.14) !important;
+}
+.fill-label {
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  color: #8FA3BF !important;
+  margin-bottom: 6px !important;
+  letter-spacing: 0.3px !important;
+  text-transform: uppercase !important;
+}
+.fill-text {
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  color: #C5CFDC !important;
+}
+"""
+
+
+STEP_CARD_SAFE_STYLE = """
+.steps,
+.process-grid,
+.process-wrap {
+  gap: 8px !important;
+}
+.step {
+  grid-template-columns: 40px 1fr !important;
+  gap: 8px !important;
+  padding: 10px !important;
+  min-width: 0 !important;
+}
+.step-num,
+.step-no {
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 18px !important;
+  border-radius: 10px !important;
+  flex: 0 0 40px !important;
+}
+.step-body,
+.step-head {
+  gap: 3px !important;
+  min-width: 0 !important;
+}
+.step-title,
+.step h4 {
+  font-size: 16px !important;
+  line-height: 1.12 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+.step-text,
+.step-desc,
+.step p,
+.card-sub,
+.mini-note {
+  font-size: 12px !important;
+  line-height: 1.26 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+.step-note,
+.step-time {
+  font-size: 11px !important;
+  line-height: 1.15 !important;
+}
+.split,
+.mini-tags,
+.step-tags {
+  gap: 6px !important;
+}
+.mini-tag,
+.pill-green,
+.pill-red,
+.step-tag {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+}
+"""
+
+
+CONCLUSION_SAFE_STYLE = """
+.slide {
+  grid-template-rows: 92px 1fr 84px !important;
+  gap: 12px !important;
+  padding: 16px 18px 16px 18px !important;
+}
+.main {
+  grid-template-columns: 1.08fr 0.92fr !important;
+  gap: 16px !important;
+}
+.card {
+  padding: 18px !important;
+}
+.mid-bridge {
+  padding: 12px 14px !important;
+  gap: 10px !important;
+}
+.bridge-label {
+  font-size: 12px !important;
+  padding: 5px 9px !important;
+}
+.bridge-item {
+  font-size: 13px !important;
+  line-height: 1.3 !important;
+}
+.arrow {
+  font-size: 16px !important;
+}
+.steps {
+  gap: 10px !important;
+}
+.step {
+  grid-template-columns: 44px 1fr !important;
+  gap: 10px !important;
+  padding: 12px !important;
+}
+.step-num {
+  font-size: 22px !important;
+  border-radius: 10px !important;
+}
+.step-body {
+  gap: 4px !important;
+}
+.step-title {
+  font-size: 17px !important;
+  line-height: 1.15 !important;
+}
+.step-desc {
+  font-size: 13px !important;
+  line-height: 1.32 !important;
+}
+.step-note {
+  font-size: 11px !important;
+}
+.split-result {
+  padding: 12px 14px !important;
+  gap: 10px !important;
+}
+.result-box {
+  padding: 10px 12px !important;
+  gap: 5px !important;
+}
+.result-box strong {
+  font-size: 15px !important;
+  line-height: 1.15 !important;
+}
+.result-box p {
+  font-size: 12px !important;
+  line-height: 1.28 !important;
+}
+.footer {
+  height: 84px !important;
+}
+.summary-card {
+  padding: 12px 16px !important;
+  gap: 14px !important;
+}
+.summary-pill {
+  font-size: 11px !important;
+  padding: 7px 10px !important;
+}
+.summary-text {
+  font-size: 16px !important;
+  line-height: 1.25 !important;
+}
+.summary-actions {
+  gap: 8px !important;
+}
+.choice {
+  font-size: 11px !important;
+  padding: 8px 10px !important;
 }
 """
 
@@ -352,7 +553,7 @@ DENSE_CARD_SAFE_STYLE = """
 .slide {
   gap: 12px !important;
   padding: 16px 18px 14px 18px !important;
-  grid-template-rows: auto 1fr 96px !important;
+  grid-template-rows: auto 1fr 88px !important;
 }
 .header,
 .title-wrap {
@@ -376,12 +577,21 @@ h1,
 .highlight-block,
 .logic-row,
 .timeline,
+.timeline-wrap,
 .node-grid,
 .tags,
 .mini-tags,
 .tag-row,
-.summary-tags {
-  gap: 10px !important;
+.summary-tags,
+.footer-tags,
+.bullet-list,
+.support-list,
+.process-grid,
+.metrics-grid,
+.metrics,
+.scene-top,
+.bottom {
+  gap: 8px !important;
 }
 .card,
 .metric-card,
@@ -393,8 +603,13 @@ h1,
 .panel,
 .memory-card,
 .stage,
-.summary-card {
-  padding: 16px !important;
+.summary-card,
+.metric-box,
+.support-item,
+.time-box,
+.scene-item,
+.policy-box {
+  padding: 12px !important;
 }
 .card-title,
 .stats-title,
@@ -405,9 +620,12 @@ h1,
 .logic-name,
 .step-title,
 .memory-title,
-.stage-name {
-  font-size: 18px !important;
-  line-height: 1.18 !important;
+.stage-name,
+.footer-title,
+.section-title,
+.support-title {
+  font-size: 16px !important;
+  line-height: 1.12 !important;
 }
 .card-label,
 .eyebrow,
@@ -419,8 +637,10 @@ h1,
 .platform,
 .pill,
 .memory-kicker,
-.stage-label {
-  font-size: 11px !important;
+.stage-label,
+.footer-tag,
+.step-tag {
+  font-size: 10px !important;
 }
 .hero-desc,
 .short-text,
@@ -440,9 +660,21 @@ h1,
 .lead,
 .stage-desc,
 .summary-text,
-.metric-text {
-  font-size: 12px !important;
-  line-height: 1.32 !important;
+.metric-text,
+.metric-caption,
+.bullet,
+.support-text,
+.keyline-text,
+.card-sub,
+.timeline-summary,
+.metric-note,
+.scene-text,
+.policy-title,
+.policy-note,
+.card-note,
+.mini-note {
+  font-size: 11px !important;
+  line-height: 1.24 !important;
 }
 .stat,
 .metric,
@@ -451,8 +683,13 @@ h1,
 .node,
 .step,
 .fromto,
-.stage {
-  padding: 12px !important;
+.stage,
+.support-item,
+.time-box,
+.metric-box,
+.scene-item,
+.policy-box {
+  padding: 10px !important;
 }
 .stat-value,
 .stat-num,
@@ -461,8 +698,12 @@ h1,
 .metric,
 .big,
 .stage-year,
-.year {
-  font-size: 30px !important;
+.year,
+.metric-main,
+.big-number,
+.metric-number,
+.policy-year .big {
+  font-size: 26px !important;
   line-height: 1 !important;
 }
 .step,
@@ -482,39 +723,60 @@ h1,
 .stage-name,
 .stage-desc,
 .summary-text,
-.metric-text {
+.metric-text,
+.metric-caption,
+.support-text,
+.footer-text,
+.lead,
+.keyline-text,
+.card-sub,
+.timeline-summary,
+.metric-note,
+.scene-text,
+.policy-title,
+.mini-note {
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
 }
 .step-head .num,
-.num {
-  width: 24px !important;
-  height: 24px !important;
-  font-size: 12px !important;
-  flex: 0 0 24px !important;
+.num,
+.step-no {
+  width: 22px !important;
+  height: 22px !important;
+  font-size: 11px !important;
+  flex: 0 0 22px !important;
 }
 .step-head {
   gap: 8px !important;
 }
 .step-body {
-  padding-left: 30px !important;
+  padding-left: 28px !important;
   gap: 4px !important;
 }
 .timeline {
   grid-template-columns: repeat(4, 1fr) !important;
 }
 .timeline .step:nth-child(n+5),
+.timeline-wrap .node:nth-child(n+5),
+.timeline .node:nth-child(n+5),
 .logic-row .logic-item:nth-child(n+4),
 .node-grid .node:nth-child(n+5),
 .tag-row .tag:nth-child(n+4),
-.summary-tags .tag:nth-child(n+4) {
+.summary-tags .tag:nth-child(n+4),
+.footer-tags .footer-tag:nth-child(n+3),
+.tags .tag:nth-child(n+4),
+.bullet-list .bullet:nth-child(n+3),
+.support-list .support-item:nth-child(n+3),
+.metrics-grid .metric-box:nth-child(n+3),
+.metrics .metric:nth-child(n+3),
+.scene-top .scene-item:nth-child(n+4) {
   display: none !important;
 }
 .footer,
 .summary-card,
 .footer-card {
-  height: 96px !important;
-  min-height: 96px !important;
+  height: 88px !important;
+  min-height: 88px !important;
 }
 """
 
@@ -530,7 +792,8 @@ def _inspect_html_layout(page) -> dict:
 
           const overflowSelectors = [
             '.card', '.stage', '.step', '.summary-card', '.footer-card',
-            '.launch-box', '.summary', '.flow'
+            '.launch-box', '.summary', '.flow', '.node', '.metric', '.metric-box',
+            '.scene-item', '.policy-box', '.timeline-summary', '.card-sub', '.metric-note'
           ];
 
           const getRect = (el) => {
@@ -577,7 +840,10 @@ def _inspect_html_layout(page) -> dict:
           const overlap = Boolean(mainRect && footerRect && mainRect.bottom > footerRect.top);
           const slideOverflow = slide ? slide.scrollHeight > slide.clientHeight + 2 : false;
 
-          const boundarySelectors = ['.title', '.subtitle', '.summary-card', '.footer-card'];
+          const boundarySelectors = [
+            '.title', '.subtitle', '.summary-card', '.footer-card',
+            '.card-title', '.card-sub', '.footer-text', '.timeline-summary', '.policy-title'
+          ];
           const boundaryIssues = [];
           if (slideRect) {
             for (const selector of boundarySelectors) {
@@ -600,14 +866,47 @@ def _inspect_html_layout(page) -> dict:
           );
 
           const timelineHeavy = Boolean(
-            document.querySelector('.timeline')
-            && document.querySelectorAll('.timeline .step').length >= 5
-            && document.querySelector('.right-col, .right-grid')
+            (document.querySelector('.timeline-wrap') && document.querySelectorAll('.timeline-wrap .node').length >= 4)
+            || (
+              document.querySelector('.timeline')
+              && (
+                document.querySelectorAll('.timeline .step').length >= 4
+                || document.querySelectorAll('.timeline .node').length >= 4
+              )
+              && document.querySelector('.right-col, .right-grid, .metrics, .metrics-grid, .bottom')
+            )
           );
 
           const denseCardHeavy = Boolean(
-            document.querySelectorAll('.card, .metric-card, .stats-card, .evidence-card, .talk-card').length >= 2
-            && (document.querySelector('.logic-row') || document.querySelector('.stat-grid') || document.querySelector('.node-grid'))
+            document.querySelectorAll('.card, .metric-card, .stats-card, .evidence-card, .talk-card, .scene-card').length >= 2
+            && (
+              document.querySelector('.logic-row')
+              || document.querySelector('.stat-grid')
+              || document.querySelector('.node-grid')
+              || document.querySelector('.metrics-grid')
+              || document.querySelector('.metrics')
+              || document.querySelector('.scene-top')
+              || document.querySelector('.policy-box')
+              || document.querySelector('.bottom')
+            )
+          );
+
+          const tocSparse = Boolean(
+            document.querySelector('.steps')
+            && document.querySelector('.flow-card')
+            && document.querySelector('.left-card')
+            && !document.querySelector('.flow-fill')
+          );
+
+          const conclusionHeavy = Boolean(
+            document.querySelector('.decision-card')
+            && document.querySelector('.split-result')
+            && document.querySelector('.summary-card')
+          );
+
+          const stepCardHeavy = Boolean(
+            document.querySelector('.steps')
+            && document.querySelectorAll('.steps .step').length >= 3
           );
 
           return {
@@ -628,6 +927,9 @@ def _inspect_html_layout(page) -> dict:
             summaryHeavy,
             timelineHeavy,
             denseCardHeavy,
+            tocSparse,
+            conclusionHeavy,
+            stepCardHeavy,
           };
         }
         """
@@ -686,6 +988,8 @@ def _should_regenerate(report: dict) -> bool:
     header_height = ((report.get("header") or {}).get("rect") or {}).get("height", 0)
     slide_delta = (report.get("slide") or {}).get("scrollHeight", 0) - (report.get("slide") or {}).get("clientHeight", 0)
 
+    high_risk_dense_page = report.get("timelineHeavy") or report.get("denseCardHeavy")
+
     return bool(
         report.get("overlap")
         or severe_overflow_count >= 1
@@ -693,6 +997,7 @@ def _should_regenerate(report: dict) -> bool:
         or header_height > 118
         or slide_delta > 12
         or len(report.get("boundaryIssues") or []) >= 2
+        or (high_risk_dense_page and total_overflow_count >= 1)
     )
 
 
@@ -710,6 +1015,18 @@ def _apply_timeline_safe_mode(page) -> None:
 
 def _apply_dense_card_safe_mode(page) -> None:
     page.add_style_tag(content=DENSE_CARD_SAFE_STYLE)
+
+
+def _apply_toc_safe_mode(page) -> None:
+    page.add_style_tag(content=TOC_SAFE_STYLE)
+
+
+def _apply_conclusion_safe_mode(page) -> None:
+    page.add_style_tag(content=CONCLUSION_SAFE_STYLE)
+
+
+def _apply_step_card_safe_mode(page) -> None:
+    page.add_style_tag(content=STEP_CARD_SAFE_STYLE)
 
 
 def _persist_style(html_path: Path, original_html: str, style_id: str, style_content: str) -> str:
@@ -746,6 +1063,18 @@ def _persist_dense_card_safe_html(html_path: Path, original_html: str) -> str:
     return _persist_style(html_path, original_html, "claude-dense-card-safe-style", DENSE_CARD_SAFE_STYLE)
 
 
+def _persist_toc_safe_html(html_path: Path, original_html: str) -> str:
+    return _persist_style(html_path, original_html, "claude-toc-safe-style", TOC_SAFE_STYLE)
+
+
+def _persist_conclusion_safe_html(html_path: Path, original_html: str) -> str:
+    return _persist_style(html_path, original_html, "claude-conclusion-safe-style", CONCLUSION_SAFE_STYLE)
+
+
+def _persist_step_card_safe_html(html_path: Path, original_html: str) -> str:
+    return _persist_style(html_path, original_html, "claude-step-card-safe-style", STEP_CARD_SAFE_STYLE)
+
+
 def render_html_with_validation(html_path: Path) -> tuple[bytes, dict]:
     from playwright.sync_api import sync_playwright
 
@@ -754,9 +1083,15 @@ def render_html_with_validation(html_path: Path) -> tuple[bytes, dict]:
     persisted_summary_safe = False
     persisted_timeline_safe = False
     persisted_dense_card_safe = False
+    persisted_toc_safe = False
+    persisted_conclusion_safe = False
+    persisted_step_card_safe = False
     summary_safe_applied = False
     timeline_safe_applied = False
     dense_card_safe_applied = False
+    toc_safe_applied = False
+    conclusion_safe_applied = False
+    step_card_safe_applied = False
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 720})
@@ -768,7 +1103,15 @@ def render_html_with_validation(html_path: Path) -> tuple[bytes, dict]:
         final_report = initial_report
         final_issues = initial_issues
 
-        if initial_report.get("timelineHeavy") and (initial_report.get("overlap") or len(initial_issues) >= 3):
+        if initial_report.get("tocSparse"):
+            _apply_toc_safe_mode(page)
+            toc_safe_applied = True
+            persisted_toc_safe = True
+            final_report = _inspect_html_layout(page)
+            final_issues = _summarize_layout_issues(final_report)
+            html_content = _persist_toc_safe_html(html_path, html_content)
+
+        if final_report.get("timelineHeavy") and (final_report.get("overlap") or len(final_issues) >= 3):
             _apply_timeline_safe_mode(page)
             timeline_safe_applied = True
             persisted_timeline_safe = True
@@ -791,6 +1134,22 @@ def render_html_with_validation(html_path: Path) -> tuple[bytes, dict]:
             final_report = _inspect_html_layout(page)
             final_issues = _summarize_layout_issues(final_report)
             html_content = _persist_summary_safe_html(html_path, html_content)
+
+        if final_report.get("conclusionHeavy") and len(final_issues) >= 1:
+            _apply_conclusion_safe_mode(page)
+            conclusion_safe_applied = True
+            persisted_conclusion_safe = True
+            final_report = _inspect_html_layout(page)
+            final_issues = _summarize_layout_issues(final_report)
+            html_content = _persist_conclusion_safe_html(html_path, html_content)
+
+        if final_report.get("stepCardHeavy") and len(final_issues) >= 1:
+            _apply_step_card_safe_mode(page)
+            step_card_safe_applied = True
+            persisted_step_card_safe = True
+            final_report = _inspect_html_layout(page)
+            final_issues = _summarize_layout_issues(final_report)
+            html_content = _persist_step_card_safe_html(html_path, html_content)
 
         compact_applied = False
         if final_issues and not _should_regenerate(final_report):
@@ -816,15 +1175,41 @@ def render_html_with_validation(html_path: Path) -> tuple[bytes, dict]:
         "summary_safe_applied": summary_safe_applied,
         "timeline_safe_applied": timeline_safe_applied,
         "dense_card_safe_applied": dense_card_safe_applied,
+        "toc_safe_applied": toc_safe_applied,
+        "conclusion_safe_applied": conclusion_safe_applied,
+        "step_card_safe_applied": step_card_safe_applied,
         "persisted_compact": persisted_compact,
         "persisted_summary_safe": persisted_summary_safe,
         "persisted_timeline_safe": persisted_timeline_safe,
         "persisted_dense_card_safe": persisted_dense_card_safe,
+        "persisted_toc_safe": persisted_toc_safe,
+        "persisted_conclusion_safe": persisted_conclusion_safe,
+        "persisted_step_card_safe": persisted_step_card_safe,
         "initial_issues": initial_issues,
         "final_issues": final_issues,
         "initial_report": initial_report,
         "final_report": final_report,
     }
+
+
+def render_html_screenshot(html_path: Path) -> bytes:
+    png, _ = render_html_with_validation(html_path)
+    return png
+
+
+def save_html_screenshot(html_path: Path, image_path: Path) -> Path:
+    png_bytes = render_html_screenshot(html_path)
+    image_path.write_bytes(png_bytes)
+    return image_path
+
+
+def write_slide_status(out_dir: Path, slide_status: dict) -> Path:
+    status_path = out_dir / "slide-status.json"
+    status_path.write_text(
+        json.dumps({"slides": slide_status}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return status_path
 
 
 def html_to_png_bytes(html_path: Path) -> bytes:
@@ -849,20 +1234,32 @@ def build_pptx(html_dir: Path, output_path: Path) -> Path:
         slide = prs.slides.add_slide(blank_layout)
         try:
             png_bytes, report = render_html_with_validation(html_path)
+            if report.get("toc_safe_applied"):
+                print("    [检查] 检测到目录页留白过大，已应用 toc-safe mode")
             if report.get("timeline_safe_applied"):
                 print("    [检查] 检测到时间线高风险布局，已应用 timeline-safe mode")
             if report.get("dense_card_safe_applied"):
                 print("    [检查] 检测到高密度卡片布局，已应用 dense-card-safe mode")
             if report.get("summary_safe_applied"):
                 print("    [检查] 检测到总结型高风险布局，已应用 summary-safe mode")
+            if report.get("conclusion_safe_applied"):
+                print("    [检查] 检测到结论页过挤布局，已应用 conclusion-safe mode")
+            if report.get("step_card_safe_applied"):
+                print("    [检查] 检测到步骤卡纵向超限，已应用 step-card-safe mode")
             if report["compact_applied"]:
                 print("    [检查] 检测到轻微超限，已应用紧凑模式")
+            if report.get("persisted_toc_safe"):
+                print("    [检查] 已将 toc-safe 样式回写到 HTML 文件")
             if report.get("persisted_timeline_safe"):
                 print("    [检查] 已将 timeline-safe 样式回写到 HTML 文件")
             if report.get("persisted_dense_card_safe"):
                 print("    [检查] 已将 dense-card-safe 样式回写到 HTML 文件")
             if report.get("persisted_summary_safe"):
                 print("    [检查] 已将 summary-safe 样式回写到 HTML 文件")
+            if report.get("persisted_conclusion_safe"):
+                print("    [检查] 已将 conclusion-safe 样式回写到 HTML 文件")
+            if report.get("persisted_step_card_safe"):
+                print("    [检查] 已将 step-card-safe 样式回写到 HTML 文件")
             if report.get("persisted_compact"):
                 print("    [检查] 已将紧凑版样式回写到 HTML 文件")
             if report["final_issues"]:

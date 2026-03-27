@@ -78,6 +78,10 @@ DEFAULT_TOPIC=红茶与绿茶的区别
 DEFAULT_AUDIENCE=销售团队
 DEFAULT_PAGES=3-5页
 HTML_POLISH_MODE=false
+HTML_AI_REVIEW_ENABLED=false
+REVIEW_PROVIDER=openai
+REVIEW_MODEL=
+REVIEW_REASONING_EFFORT=high
 OUTPUT_DIR=./output
 ```
 
@@ -98,6 +102,20 @@ HTML_POLISH_MODE=false
 
 - `false`：默认模式，只做自动布局检测与基础兜底
 - `true`：开启逐页精修模式，只对有问题页面追加一轮局部修复
+
+### `HTML_AI_REVIEW_ENABLED` 用法
+
+```env
+HTML_AI_REVIEW_ENABLED=false
+REVIEW_PROVIDER=openai
+REVIEW_MODEL=
+REVIEW_REASONING_EFFORT=high
+```
+
+- `false`：关闭 AI 审查阶段，仅做技术布局校验
+- `true`：在技术校验后增加独立截图审查，并产出 `reviews/` 与 `slide-status.json`
+- `REVIEW_PROVIDER`：审查模型使用的 provider，默认跟随主 provider，也可独立指定
+- `REVIEW_MODEL`：如需与生成模型分离，可单独指定审查模型；留空则使用该 provider 默认模型
 
 命令行也可以临时开启：
 
@@ -169,6 +187,7 @@ HTML pipeline 当前内置了页面自检兜底：
 - 对“总结页 + 多模块 + footer”这类高风险布局，会自动触发 `summary-safe mode`
 - 对发展脉络/阶段演进页，会自动触发 `timeline-safe mode`
 - 对高密度信息卡页面，会自动触发 `dense-card-safe mode`
+- 可选开启 `HTML_AI_REVIEW_ENABLED=true`，在技术校验后增加独立截图审查，并把 reviewer 建议回灌修复
 - 修正后的安全样式会回写到生成的 `.html` 文件中，便于直接检查最终版本
 
 ```bash
